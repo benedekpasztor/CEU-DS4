@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1556909825752.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "233DF582",
+    "lastKnownWriteTime" : 1556565239,
+    "last_content_update" : 1556565239,
+    "path" : "~/R-Projects/03_SPRING/CEU-DS4/gutenbergr.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "20,18",
+        "scrollLine" : "0"
+    },
+    "relative_order" : 6,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

@@ -1,0 +1,23 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1556833947094.000,
+    "dirty" : true,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "64579119",
+    "lastKnownWriteTime" : 1556958440,
+    "last_content_update" : 1556959972179,
+    "path" : "~/R-Projects/03_SPRING/CEU-DS4/CEU-DS4-Assignment/Analysis.R",
+    "project_path" : "Analysis.R",
+    "properties" : {
+        "cursorPosition" : "146,53",
+        "scrollLine" : "143",
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

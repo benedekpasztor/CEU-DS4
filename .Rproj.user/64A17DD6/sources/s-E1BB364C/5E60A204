@@ -1,0 +1,29 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1556863565895.000,
+    "dirty" : false,
+    "encoding" : "",
+    "folds" : "",
+    "hash" : "0",
+    "id" : "5E60A204",
+    "lastKnownWriteTime" : 7308604914264011873,
+    "last_content_update" : 1556863565895,
+    "path" : null,
+    "project_path" : null,
+    "properties" : {
+        "cacheKey" : "51A41BAE",
+        "caption" : "hu_stop_word",
+        "contentUrl" : "grid_resource/gridviewer.html?env=&obj=hu_stop_word&cache_key=51A41BAE",
+        "displayedObservations" : "1184",
+        "environment" : "",
+        "object" : "hu_stop_word",
+        "preview" : "0",
+        "totalObservations" : "1184",
+        "variables" : "1"
+    },
+    "relative_order" : 5,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_dataframe"
+}

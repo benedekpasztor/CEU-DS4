@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1556224778578.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "3919914522",
+    "id" : "335D52B3",
+    "lastKnownWriteTime" : 1556228407,
+    "last_content_update" : 1556228407198,
+    "path" : "~/R-Projects/03_SPRING/CEU-DS4/02_Twitter_OwnCredentials.R",
+    "project_path" : null,
+    "properties" : {
+        "cursorPosition" : "37,13",
+        "scrollLine" : "28"
+    },
+    "relative_order" : 2,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

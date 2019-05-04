@@ -111,54 +111,66 @@ word_sentiments %>%
     coord_flip()
 
 library(lubridate)
-frequency <- words %>% 
-  mutate(datum = year(datum),
-    word = str_extract(word, "[a-z']+")) %>%
-  count(datum, word) %>%
-  group_by(datum) %>%
-  mutate(proportion = n / sum(n)) %>% 
-  select(-n) %>% 
-  spread(datum, proportion) %>% 
-  gather(datum, proportion, `2000`:`2001`)
 
-library(scales)
-ggplot(frequency, aes(x = proportion, y = `2002`, color = abs(`2002` - proportion))) +
-  geom_abline(color = "gray40", lty = 2) +
-  geom_jitter(alpha = 0.1, size = 2.5, width = 0.3, height = 0.3) +
-  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
-  scale_x_log10(labels = percent_format()) +
-  scale_y_log10(labels = percent_format()) +
-  scale_color_gradient(limits = c(0, 0.001), low = "darkslategray4", high = "gray75") +
-  facet_wrap(~ datum, ncol = 2) +
-  theme(legend.position="none") +
-  labs(y = "2002", x = NULL)
 
+
+
+get.seasons <- function(dates, hemisphere = "N"){
+  library(data.table)
+  library(zoo)
+  library(dplyr)
+  
+  years <- unique(year(dates))
+  years <- c(min(years - 1), max(years + 1), years) %>% sort
+  
+  if(hemisphere == "N"){
+    seasons <- c("winter", "spring", "summer", "fall")}else{
+      seasons <- c("summer", "fall", "winter", "spring")}
+  
+  dt.dates <- bind_rows(
+    data.table(date = as.Date(paste0(years, "-12-21")), init = seasons[1], type = "B"),# Summer in south hemisphere
+    data.table(date = as.Date(paste0(years, "-3-21")), init = seasons[2], type = "B"), # Fall in south hemisphere
+    data.table(date = as.Date(paste0(years, "-6-21")), init = seasons[3], type = "B"), # Winter in south hemisphere
+    data.table(date = as.Date(paste0(years, "-9-23")), init = seasons[4], type = "B"), # Winter in south hemisphere
+    data.table(date = dates, i = 1:(length(dates)), type = "A") # dates to compute
+  )[order(date)] 
+  
+  dt.dates[, init := zoo::na.locf(init)] 
+  
+  return(dt.dates[type == "A"][order(i)]$init)
+}
 
 
 
 word_sentiments %>%
-  group_by(year = year(datum), month = month(datum)) %>% 
-  dplyr::summarize(score = sum(sentiment)) %>% 
+  group_by(ciklus, year = year(datum), season = get.seasons(datum, "N")) %>% 
+  dplyr::summarize(score = sum(sentiment) / n()) %>% 
   ungroup() %>% 
-  mutate(datum = paste0(year, "-", month)) %>% 
-  select(-year, -month) %>% 
-  ggplot(aes(datum, score, fill = substr(datum, 1, 4))) +
-  geom_col(show.legend = FALSE)
+  mutate(datum = paste0(year, "-", season)) %>% 
+  select(-year) %>% 
+  ggplot(aes(datum, score, fill = ciklus)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip()
+
   # facet_wrap(~method, ncol = 1, scales = "free_y")
 
 
 word_sentiments %>%
   group_by(ciklus) %>% 
-  dplyr::summarize(score = sum(sentiment)) %>% 
+  dplyr::summarize(score = sum(sentiment) / n()) %>% 
   ungroup() %>%   
   ggplot(aes(ciklus, score, fill = score)) +
   geom_col(show.legend = FALSE)
 # facet_wrap(~method, ncol = 1, scales = "free_y")
 
+season("2014-12-01")
 
 
 word_count <- words %>%
   count(ciklus, word, sort = TRUE)
+
+
+
 
 
 words_theme <- word_count %>%
@@ -185,10 +197,7 @@ words_theme %>%
   data.frame() %>%
   mutate(word = reorder(word, -tf_idf)) %>%
   ggplot(aes(word, tf_idf, fill = ciklus)) +
-    geom_bar(stat = "identity", show.legend = FALSE) +
+    geom_col(show.legend = FALSE) +
     facet_wrap(. ~ ciklus, ncol = 2, scales = "free") +
     labs(x = NULL, y = "tf-idf") +
     coord_flip()
-
-    x=reorder(myx, -myy)
-mutate(name = fct_reorder(name, desc(val))) %>%
