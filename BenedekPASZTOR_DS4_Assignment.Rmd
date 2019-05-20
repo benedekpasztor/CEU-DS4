@@ -1,0 +1,516 @@
+---
+title: "Data Science 4 - Unstructured Text Analysis"
+author: "Benedek PÁSZTOR"
+date: "May 20, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+This report has been created for the Data Science 4 coursework in May 2019 at the Central European University, Budapest. This course focuses on unsturcured text analysis and the R tidytext approach. The goal of this exercise has been to practise the tidytext approach with a freely chosen unstructured text. 
+
+The text chosen has been scraped down from the website of the Hungarian Parliament: www.parlament.hu
+
+The particular goal of this exercise has been to see trends in the Parliament speeches of Viktor Orbán, the current prime minister of Hungary. 
+
+- The hypothesis is that by sentiment analysis there can be seen a trend in how he speaks on the government or on the opposition. 
+
+- Moreover, it is also a hypothesis that the current hot topics of a cycle can be seen in the speech analysis of Viktor Orbán.
+
+
+## Web scraping
+
+The following code has been used for web scraping. Note that the exact names of the web pages to scrape down are stored in an external .csv file.
+
+```{r}
+
+library(rvest)
+library(stringr)
+library(tidyr)
+library(tidyverse)
+
+links <- read_csv("links.csv")
+my_urls <- links$link
+
+c <- data.frame()
+for (i in 1:nrow(links)){ 
+  data <- links[i, ]
+  
+  my_page <- read_html(data$link)
+
+    b <- my_page %>% 
+      html_nodes('.scrollable') %>%
+      html_text() %>% 
+      str_extract("[12][09][901][1234567890].[1234567890][1234567890].[1234567890][1234567890].") %>% 
+      as.Date(format = "%Y.%m.%d.", tz = "CET") %>% 
+      data_frame()
+      
+    
+    
+    a <- my_page %>% 
+      html_nodes("[class='portlet-body']") %>%
+      html_text() %>% 
+      as.character() %>% 
+      str_remove_all("\\s*\\([^\\)]+\\)") %>% 
+      str_remove_all("\\\n") %>% 
+      strsplit("Ülésnap") %>% 
+      unlist() %>% 
+      str_remove("FelszólalásFelszólalás(.*):") %>% 
+      str_remove_all("/\\*\\*.*") %>% 
+      data_frame() %>% 
+      dplyr::rename(word = ".") %>% 
+      tail(-1)
+    
+    c_i <- cbind(data$ciklus, b, a)
+    
+    colnames(c_i) <- c("ciklus", "datum", "word")
+    
+    c <- rbind(c, c_i)
+}
+
+```
+
+
+
+## Data preparation
+
+
+Now let us load the Hungarian stop words. The encoding is set to UTF-8.
+
+```{r}
+c <- c %>% head(-1)
+
+library(stringi)
+hu_stop_word <- read.csv(paste0(getwd(), "/data/stopwords-hu.txt"),
+                         encoding = "UTF-8") %>% 
+  dplyr::rename(word = a) %>% 
+  mutate(word = as.character(word))
+
+```
+
+
+
+The Hungarian stop word calendar unfortunately is not perfect, so a couple of extra words have been manually removed from the dataset, on which the unnest_tokens function has been called.
+
+```{r}
+library(tidytext)
+words <- c %>%
+  unnest_tokens(word, word) %>% 
+  anti_join(hu_stop_word) %>% 
+  filter(!str_detect(word, "^a$")) %>% 
+  filter(!str_detect(word, "egyébként")) %>% 
+  filter(!str_detect(word, "tisztelt")) %>%
+  filter(!str_detect(word, "hölgyeim")) %>%
+  filter(!str_detect(word, "uraim")) %>%
+  filter(!str_detect(word, "képviselőtárs.*")) %>%
+  filter(!str_detect(word, "2015")) %>%
+  filter(!str_detect(word, "2010")) %>%
+  filter(!str_detect(word, "figyelmét")) %>%
+  filter(!str_detect(word, "Tisztelt")) %>%
+  filter(!str_detect(word, "magyar(.*)")) %>%
+  filter(!str_detect(word, "98")) %>%
+  filter(!str_detect(word, "2002")) %>%
+  filter(!str_detect(word, "2001")) %>%
+  filter(!str_detect(word, "képviselőtársam")) %>%
+  filter(!str_detect(word, "képviselő")) %>%
+  filter(!str_detect(word, "tisztelettel")) %>%
+  filter(!str_detect(word, "megtisztelő")) %>%
+  filter(!str_detect(word, "elnök")) %>%
+  filter(!str_detect(word, "emberek")) %>%
+  filter(!str_detect(word, "tudom")) %>%
+  filter(!str_detect(word, "ház")) %>%
+  filter(!str_detect(word, "képviselőtársam")) %>%
+  filter(!str_detect(word, "szeretném")) %>%
+  filter(!str_detect(word, "megtisztelő")) %>%
+  filter(!str_detect(word, "politikai")) %>%
+  filter(!str_detect(word, "ország")) %>%
+  filter(!str_detect(word, "tenni")) %>%
+  filter(!str_detect(word, "illeti")) %>%
+  filter(!str_detect(word, "mondani")) %>%
+  filter(!str_detect(word, "áll")) %>%
+  filter(!str_detect(word, "megtisztel.*")) %>%
+  filter(!str_detect(word, "figyelmüket")) %>%
+  filter(!str_detect(word, "bennünket")) %>%
+  filter(!str_detect(word, "tudjuk")) %>%
+  filter(!str_detect(word, "k[eé]pvisel.*")) %>%
+  filter(!str_detect(word, "var")) %>%
+  filter(!str_detect(word, "fontos")) %>%
+  filter(!str_detect(word, "dolog")) %>%
+  filter(!str_detect(word, "következő")) %>%
+  filter(!str_detect(word, "érdekében")) %>%
+  filter(!str_detect(word, "és")) %>%
+  mutate(word = ifelse(word == "magyarországon", "magyarország", word))
+```
+
+## Sentiment analysis
+
+
+
+Now the preparation of the sentiment analysis is done. The sentiment dictionaries are called, rbinded and the inner-joined with the unnest tokens.
+
+
+```{r}
+positive_words <- read_csv("data/PrecoSenti/PrecoPos.txt", col_names = F) %>%
+  mutate(sentiment=1)
+
+negative_words <- read_csv("data/PrecoSenti/PrecoNeg.txt", col_names = F) %>%
+  mutate(sentiment=-1)
+
+hungarian_sentiment <- rbind(positive_words, negative_words) %>% 
+  dplyr::rename(word = X1)
+
+
+str(hungarian_sentiment)
+word_sentiments <- words %>%
+  inner_join(hungarian_sentiment)
+
+
+```
+
+
+
+Let us see now which words contributed the most to the sentiments. Translated to Hungarian, they really make sense. For example, helyes means correct and rossz means bad, being the words contributing the most to positive and negative sentiments.
+
+```{r}
+word_sentiments %>%
+  count(word, sentiment) %>% 
+  mutate(word = reorder(word, n),
+         relsent = n * sentiment) %>% 
+  arrange(-n) %>% 
+  head(20) %>% 
+  ggplot(aes(word, n * sentiment, fill = sentiment)) + 
+    geom_col(show.legend = FALSE) +
+    labs(y = "Contribution to sentiment", x = NULL) + 
+    coord_flip()
+```
+
+
+
+
+
+As there are many data and numerous speeches given by Viktor Orbán at the Hungarian parliament, the ones cannot be analysed one by one. Instead, quarter variables are created within each parliamentary cycle, and then the sentiment of each season is analysed.
+
+
+What we can see in the chart is that most speeches of Viktor Orbán are positive. The ones being negative are the ones when he was in opposition, as well as when in 2015 he was referring to terrorist actions numerous times.
+
+
+Please note that the scores are in relative terms, as he spoke up in some periods much more than in other. FOr example, during he being in opposition, he talked much less than on the government. The colors refer to the parliamentary cycles he has been participating.
+
+```{r}
+word_sentiments %>%
+  group_by(ciklus, year = lubridate::year(datum), quarter = lubridate::quarter(datum)) %>%
+  dplyr::summarize(score = sum(sentiment) / n()) %>% 
+  ungroup() %>% 
+  mutate(datum = paste0(year, "-", quarter)) %>% 
+  select(-year) %>% 
+  ggplot(aes(datum, score, fill = ciklus)) +
+  geom_col(show.legend = T) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.7))
+```
+
+
+
+If we look at his czcles grouped, it is interesting to note that the period he used the most negative words was around the global crisis, between 2006 and 2010. Nonetheless, the ones he was the most positive was around 2002 and 2006. Although in this period he was in the opposition, it is probably because he was referring back many times to when he was in the government.
+
+```{r}
+word_sentiments %>%
+  group_by(ciklus) %>%
+  dplyr::summarize(score = sum(sentiment) / n()) %>% 
+  ungroup() %>%   
+  ggplot(aes(ciklus, score, fill = ciklus)) +
+  geom_col(show.legend = FALSE) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.7))
+
+```
+
+
+
+
+
+
+## Topic assessment (TF-IDF on unique words and on bigrams)
+
+
+Now a basic word cloud is checked on the dataset. The words mainly refer to "European", "national", "government" etc.
+
+```{r}
+library(wordcloud)
+words %>%
+  count(word) %>%
+  with(wordcloud(word, n, max.words = 15))
+```
+
+
+
+
+At the beginning the data preparation, some more relevant cleaning and the tf_idf analysis is done.
+```{r}
+word_count <- words %>%
+  count(ciklus, word, sort = TRUE)
+
+words_theme <- word_count %>%
+  bind_tf_idf(word, ciklus, n)
+
+word_count <- word_count %>% filter(!str_detect(word, "képvisel(.*)")) %>% 
+  filter(!str_detect(word, "tenni")) %>% 
+  filter(!str_detect(word, "mondani")) %>% 
+  filter(!str_detect(word, "gmo"))
+
+
+words_theme <- word_count %>%
+  bind_tf_idf(word, ciklus, n) %>%
+  mutate(word = factor(word, levels = rev(unique(word)))) %>% 
+  arrange(ciklus, desc(tf_idf))
+
+```
+
+
+
+Then, an initial tf-idf analyisis chart is created for the cycles.
+
+
+We can see in the chart below numerous interesting points.
+
+- 1998-2002 (Orbán is PM): citizens, millenia, olimpics, achieved
+
+- 2002-2006 (Orbán is NOT PM): luxury profits, our achievements, profit
+
+- 2006-2010 (Orbán is NOT PM): crisis treatment, tension, lies
+
+- 2010-2014 (Orbán is PM): consultations
+
+- 2014-2018 (Orbáni is PM): Soros, Brussels, christian democrat
+
+- 2018-2022 (Orbán is PM): District XV, nuclear power plant, let's go
+
+
+```{r}
+words_theme %>% 
+  group_by(ciklus) %>% 
+  top_n(15, tf_idf) %>%
+  ungroup() %>% 
+  data.frame() %>%
+  mutate(word = reorder(word, -tf_idf)) %>%
+  ggplot(aes(word, tf_idf, fill = ciklus)) +
+    geom_col(show.legend = FALSE) +
+    facet_wrap(. ~ ciklus, ncol = 2, scales = "free") +
+    labs(x = NULL, y = "tf-idf") +
+    coord_flip()
+```
+
+
+
+
+Finally, let us see a bigram for the relationships between different words. Initially I am doing some additional cleaning.
+
+
+```{r}
+
+c_bigrams <- c %>%
+  unnest_tokens(bigram, word, token = "ngrams", n = 2)
+
+hu_stop_word <- hu_stop_word %>% 
+  mutate(word1 = word,
+         word2 = word)
+
+bigrams_separated <- c_bigrams %>%
+  group_by(ciklus, datum) %>% 
+  separate(bigram, c("word1", "word2"), sep = " ") %>% 
+  ungroup() %>% 
+  anti_join(hu_stop_word) %>% 
+  filter(!str_detect(word1, "^a$")) %>% 
+  filter(!str_detect(word1, "egyébként")) %>% 
+  filter(!str_detect(word1, "tisztelt")) %>%
+  filter(!str_detect(word1, "hölgyeim")) %>%
+  filter(!str_detect(word1, "uraim")) %>%
+  filter(!str_detect(word1, "képviselőtárs.*")) %>%
+  filter(!str_detect(word1, "2015")) %>%
+  filter(!str_detect(word1, "2010")) %>%
+  filter(!str_detect(word1, "figyelmét")) %>%
+  filter(!str_detect(word1, "Tisztelt")) %>%
+  filter(!str_detect(word1, "magyar(.*)")) %>%
+  filter(!str_detect(word1, "98")) %>%
+  filter(!str_detect(word1, "2002")) %>%
+  filter(!str_detect(word1, "2001")) %>%
+  filter(!str_detect(word1, "képviselőtársam")) %>%
+  filter(!str_detect(word1, "képviselő")) %>%
+  filter(!str_detect(word1, "tisztelettel")) %>%
+  filter(!str_detect(word1, "megtisztelő")) %>%
+  filter(!str_detect(word1, "elnök")) %>%
+  filter(!str_detect(word1, "emberek")) %>%
+  filter(!str_detect(word1, "tudom")) %>%
+  filter(!str_detect(word1, "ház")) %>%
+  filter(!str_detect(word1, "képviselőtársam")) %>%
+    filter(!str_detect(word1, "function")) %>%
+
+  filter(!str_detect(word1, "szeretném")) %>%
+  filter(!str_detect(word1, "megtisztelő")) %>%
+  filter(!str_detect(word1, "politikai")) %>%
+  filter(!str_detect(word1, "ország")) %>%
+  filter(!str_detect(word1, "tenni")) %>%
+  filter(!str_detect(word1, "illeti")) %>%
+  filter(!str_detect(word1, "mondani")) %>%
+  filter(!str_detect(word1, "áll")) %>%
+  filter(!str_detect(word1, "megtisztel.*")) %>%
+  filter(!str_detect(word1, "figyelmüket")) %>%
+  filter(!str_detect(word1, "bennünket")) %>%
+    filter(!str_detect(word1, "az")) %>%
+  filter(!str_detect(word1, "tudjuk")) %>%
+  filter(!str_detect(word1, "k[eé]pvisel.*")) %>%
+  filter(!str_detect(word1, "var")) %>%
+  filter(!str_detect(word1, "fontos")) %>%
+  filter(!str_detect(word1, "dolog")) %>%
+  filter(!str_detect(word1, "következő")) %>%
+  filter(!str_detect(word1, "érdekében")) %>%
+  filter(!str_detect(word1, "és")) %>%
+  mutate(word1 = ifelse(word1 == "magyarországon", "magyarország", word1)) %>% 
+    filter(!str_detect(word2, "^a$")) %>% 
+  filter(!str_detect(word2, "egyébként")) %>% 
+  filter(!str_detect(word2, "tisztelt")) %>%
+  filter(!str_detect(word2, "hölgyeim")) %>%
+  filter(!str_detect(word2, "uraim")) %>%
+  filter(!str_detect(word2, "képviselőtárs.*")) %>%
+  filter(!str_detect(word2, "2015")) %>%
+  filter(!str_detect(word2, "2010")) %>%
+  filter(!str_detect(word2, "figyelmét")) %>%
+  filter(!str_detect(word2, "Tisztelt")) %>%
+  filter(!str_detect(word2, "magyar(.*)")) %>%
+  filter(!str_detect(word2, "98")) %>%
+  filter(!str_detect(word2, "2002")) %>%
+  filter(!str_detect(word2, "2001")) %>%
+  filter(!str_detect(word2, "képviselőtársam")) %>%
+  filter(!str_detect(word2, "képviselő")) %>%
+  filter(!str_detect(word2, "tisztelettel")) %>%
+  filter(!str_detect(word2, "megtisztelő")) %>%
+  filter(!str_detect(word2, "elnök")) %>%
+  filter(!str_detect(word2, "emberek")) %>%
+  filter(!str_detect(word2, "tudom")) %>%
+  filter(!str_detect(word2, "ház")) %>%
+  filter(!str_detect(word2, "képviselőtársam")) %>%
+  filter(!str_detect(word2, "szeretném")) %>%
+  filter(!str_detect(word2, "megtisztelő")) %>%
+  filter(!str_detect(word2, "politikai")) %>%
+  filter(!str_detect(word2, "ország")) %>%
+  filter(!str_detect(word2, "tenni")) %>%
+  filter(!str_detect(word2, "illeti")) %>%
+  filter(!str_detect(word2, "mondani")) %>%
+  filter(!str_detect(word2, "áll")) %>%
+  filter(!str_detect(word2, "megtisztel.*")) %>%
+  filter(!str_detect(word2, "figyelmüket")) %>%
+  filter(!str_detect(word2, "bennünket")) %>%
+  filter(!str_detect(word2, "tudjuk")) %>%
+  filter(!str_detect(word2, "k[eé]pvisel.*")) %>%
+  filter(!str_detect(word2, "var")) %>%
+  filter(!str_detect(word2, "fontos")) %>%
+  filter(!str_detect(word2, "dolog")) %>%
+    filter(!str_detect(word2, "az")) %>%
+    filter(!str_detect(word2, "ne")) %>%
+  
+    filter(!str_detect(word2, "ön")) %>%
+      filter(!str_detect(word2, "őket")) %>%
+  
+      filter(!str_detect(word2, "öntől")) %>%
+  
+      filter(!str_detect(word2, "ilyen")) %>%
+
+  filter(!str_detect(word2, "következő")) %>%
+  filter(!str_detect(word2, "érdekében")) %>%
+  filter(!str_detect(word2, "és")) %>%
+  mutate(word2 = ifelse(word2 == "magyarországon", "magyarország", word2))
+
+
+bigrams_united <- bigrams_separated %>%
+  unite(bigram, word1, word2, sep = " ")
+
+bigram_counts <- bigrams_separated %>% 
+  count(word1, word2, sort = TRUE)
+
+bigram_tf_idf <- bigrams_united %>%
+  count(ciklus, bigram) %>%
+  bind_tf_idf(bigram, ciklus, n) %>%
+  arrange(desc(tf_idf))
+
+```
+
+
+
+Then, let us see a bigram tf-idf toopic analysis for the cycles. Here we can see similar expressions as for the simple word one.
+
+An interesting note here is that here for the cycle of 2014-2018 "Soros György" has the highest 
+
+```{r}
+bigram_tf_idf %>% 
+  ungroup() %>% 
+  group_by(ciklus) %>% 
+  top_n(10, tf_idf) %>% 
+  ungroup() %>% 
+  data.frame() %>%
+  mutate(bigram = reorder(bigram, -tf_idf)) %>%
+  ggplot(aes(bigram, tf_idf, fill = ciklus)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(. ~ ciklus, ncol = 3, scales = "free") +
+  labs(x = NULL, y = "tf-idf") +
+  coord_flip()
+```
+
+
+
+
+
+
+
+Last, but not least, let us see some relationships between words. In what order do they typically follow each other.
+
+Mostly we can observe here Hungarian expressions like 
+
+"Miniszter Úr" - "Sir Minister"
+
+but also we can see expressions being special for Viktor Orbán like
+
+"Nemzeti Konzultáció" - "National Consulation"
+
+
+Mostly, however, there are typical expression one of with which I would like to end my exercise: "Köszönöm szépen" - "Thank you". :) Thank you for teaching us!
+
+
+```{r}
+library(ggraph)
+library(igraph)
+
+bigram_graph <- bigram_counts %>%
+  filter(n > 20) %>%
+  graph_from_data_frame()
+
+set.seed(2016)
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()
+
+```
+
+
+
+
+
+
+## Conclusions
+
+In this work a tidytext R approach has been used to analyze the parliamentary speeches of Viktor Orbán. All his speeches and debates have been scraped down, cleaned and then analyzed. 
+
+The hypothesis that he mostly talks about negative sentiments in the opposition was partially proved, as the most negative sentiment are reflected between the period of 2006-2010 when he was in the opposition. Nevertheless, this period was also the period of crisis, hence, further investigation should be needed for the exact periods and words influencing the results.
+
+The tf-idf analysis has been done for both one-word and for bigram version of the unnested tokens. It has been very interesting to note how much actual politics are reflected on the results. Hence, the second hypothesis has been proved very much.
+
+
+
+Further investigation is planned in some free time during the summer, and then I plan to public my work on medium.com. Thank you very much for the motivation and for the received skills.

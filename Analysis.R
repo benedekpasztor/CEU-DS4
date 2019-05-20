@@ -6,9 +6,6 @@ library(tidyverse)
 links <- read_csv("links.csv")
 my_urls <- links$link
 
-links[1,]
-c$datum
-
 c <- data.frame()
 for (i in 1:nrow(links)){ 
   data <- links[i, ]
@@ -44,11 +41,13 @@ for (i in 1:nrow(links)){
     
     c <- rbind(c, c_i)
 }
+c <- c %>% tail(-1)
 
+library(stringi)
+hu_stop_word <- read.csv(paste0(getwd(), "/data/stopwords-hu.txt"),
+                         encoding = "UTF-8") %>% 
+  dplyr::rename(word = a)
 
-
-hu_stop_word <- read_csv(paste0(getwd(), "/data/stopwords-hu.txt")) %>% dplyr::rename(word = a)
-### karakterkódolás!
 
 library(tidytext)
 words <- c %>%
@@ -72,15 +71,36 @@ words <- c %>%
   filter(!str_detect(word, "képviselő")) %>%
   filter(!str_detect(word, "tisztelettel")) %>%
   filter(!str_detect(word, "megtisztelő")) %>%
+  filter(!str_detect(word, "elnök")) %>%
+  filter(!str_detect(word, "emberek")) %>%
+  filter(!str_detect(word, "tudom")) %>%
+  filter(!str_detect(word, "ház")) %>%
+  filter(!str_detect(word, "képviselőtársam")) %>%
+  filter(!str_detect(word, "szeretném")) %>%
+  filter(!str_detect(word, "megtisztelő")) %>%
+  filter(!str_detect(word, "politikai")) %>%
+  filter(!str_detect(word, "ország")) %>%
+  filter(!str_detect(word, "tenni")) %>%
+  filter(!str_detect(word, "illeti")) %>%
+  filter(!str_detect(word, "mondani")) %>%
+  filter(!str_detect(word, "áll")) %>%
+  filter(!str_detect(word, "megtisztel.*")) %>%
+  filter(!str_detect(word, "figyelmüket")) %>%
+  filter(!str_detect(word, "bennünket")) %>%
+  filter(!str_detect(word, "tudjuk")) %>%
+  filter(!str_detect(word, "k[eé]pvisel.*")) %>%
+  filter(!str_detect(word, "var")) %>%
+  filter(!str_detect(word, "fontos")) %>%
+  filter(!str_detect(word, "dolog")) %>%
+  filter(!str_detect(word, "következő")) %>%
+  filter(!str_detect(word, "érdekében")) %>%
+  filter(!str_detect(word, "és")) %>%
   mutate(word = ifelse(word == "magyarországon", "magyarország", word))
 
-  
 
 
 library(wordcloud)
-max(words$datum)
 words %>%
-  # filter(datum > "2014-05-01") %>% 
   count(word) %>%
   with(wordcloud(word, n, max.words = 15))
 
@@ -111,55 +131,63 @@ word_sentiments %>%
     coord_flip()
 
 library(lubridate)
-frequency <- words %>% 
-  mutate(datum = year(datum),
-    word = str_extract(word, "[a-z']+")) %>%
-  count(datum, word) %>%
-  group_by(datum) %>%
-  mutate(proportion = n / sum(n)) %>% 
-  select(-n) %>% 
-  spread(datum, proportion) %>% 
-  gather(datum, proportion, `2000`:`2001`)
 
-library(scales)
-ggplot(frequency, aes(x = proportion, y = `2002`, color = abs(`2002` - proportion))) +
-  geom_abline(color = "gray40", lty = 2) +
-  geom_jitter(alpha = 0.1, size = 2.5, width = 0.3, height = 0.3) +
-  geom_text(aes(label = word), check_overlap = TRUE, vjust = 1.5) +
-  scale_x_log10(labels = percent_format()) +
-  scale_y_log10(labels = percent_format()) +
-  scale_color_gradient(limits = c(0, 0.001), low = "darkslategray4", high = "gray75") +
-  facet_wrap(~ datum, ncol = 2) +
-  theme(legend.position="none") +
-  labs(y = "2002", x = NULL)
 
+
+
+get.seasons <- function(dates, hemisphere = "N"){
+  library(data.table)
+  library(zoo)
+  library(dplyr)
+  
+  years <- unique(year(dates))
+  years <- c(min(years - 1), max(years + 1), years) %>% sort
+  
+  if(hemisphere == "N"){
+    seasons <- c("winter", "spring", "summer", "fall")}else{
+      seasons <- c("summer", "fall", "winter", "spring")}
+  
+  dt.dates <- bind_rows(
+    data.table(date = as.Date(paste0(years, "-12-21")), init = seasons[1], type = "B"),# Summer in south hemisphere
+    data.table(date = as.Date(paste0(years, "-3-21")), init = seasons[2], type = "B"), # Fall in south hemisphere
+    data.table(date = as.Date(paste0(years, "-6-21")), init = seasons[3], type = "B"), # Winter in south hemisphere
+    data.table(date = as.Date(paste0(years, "-9-23")), init = seasons[4], type = "B"), # Winter in south hemisphere
+    data.table(date = dates, i = 1:(length(dates)), type = "A") # dates to compute
+  )[order(date)] 
+  
+  dt.dates[, init := zoo::na.locf(init)] 
+  
+  return(dt.dates[type == "A"][order(i)]$init)
+}
 
 
 
 word_sentiments %>%
-  group_by(year = year(datum), month = month(datum)) %>% 
-  dplyr::summarize(score = sum(sentiment)) %>% 
+  group_by(ciklus, year = year(datum), season = get.seasons(datum, "N")) %>% 
+  dplyr::summarize(score = sum(sentiment) / n()) %>% 
   ungroup() %>% 
-  mutate(datum = paste0(year, "-", month)) %>% 
-  select(-year, -month) %>% 
-  ggplot(aes(datum, score, fill = substr(datum, 1, 4))) +
-  geom_col(show.legend = FALSE)
+  mutate(datum = paste0(year, "-", season)) %>% 
+  select(-year) %>% 
+  ggplot(aes(datum, score, fill = ciklus)) +
+  geom_col(show.legend = FALSE) +
+  coord_flip()
+
   # facet_wrap(~method, ncol = 1, scales = "free_y")
 
 
 word_sentiments %>%
   group_by(ciklus) %>% 
-  dplyr::summarize(score = sum(sentiment)) %>% 
+  dplyr::summarize(score = sum(sentiment) / n()) %>% 
   ungroup() %>%   
   ggplot(aes(ciklus, score, fill = score)) +
   geom_col(show.legend = FALSE)
 # facet_wrap(~method, ncol = 1, scales = "free_y")
 
+season("2014-12-01")
 
 
 word_count <- words %>%
   count(ciklus, word, sort = TRUE)
-
 
 words_theme <- word_count %>%
   bind_tf_idf(word, ciklus, n)
@@ -185,10 +213,88 @@ words_theme %>%
   data.frame() %>%
   mutate(word = reorder(word, -tf_idf)) %>%
   ggplot(aes(word, tf_idf, fill = ciklus)) +
-    geom_bar(stat = "identity", show.legend = FALSE) +
+    geom_col(show.legend = FALSE) +
     facet_wrap(. ~ ciklus, ncol = 2, scales = "free") +
     labs(x = NULL, y = "tf-idf") +
     coord_flip()
 
-    x=reorder(myx, -myy)
-mutate(name = fct_reorder(name, desc(val))) %>%
+
+
+
+
+
+### TOKENIZING BY BIGRAM
+
+library(dplyr)
+library(tidytext)
+
+c_bigrams <- c %>%
+  unnest_tokens(bigram, word, token = "ngrams", n = 2)
+
+
+library(tidyr)
+
+bigrams_separated <- c_bigrams %>%
+  group_by(ciklus, datum) %>% 
+  separate(bigram, c("word1", "word2"), sep = " ") %>% 
+  ungroup()
+
+bigrams_filtered <- bigrams_separated %>%
+  filter(!word1 %in% stop_words$word) %>%
+  filter(!word2 %in% stop_words$word)
+
+
+bigrams_united <- bigrams_filtered %>%
+  unite(bigram, word1, word2, sep = " ")
+
+bigram_counts <- bigrams_filtered %>% 
+  count(word1, word2, sort = TRUE)
+
+bigram_tf_idf <- bigrams_united %>%
+  count(ciklus, bigram) %>%
+  bind_tf_idf(bigram, ciklus, n) %>%
+  arrange(desc(tf_idf))
+
+
+
+
+
+## Bigram tf_idf
+str(bigram_tf_idf)
+bigram_tf_idf %>% 
+  ungroup() %>% 
+  group_by(ciklus) %>% 
+  top_n(10, tf_idf) %>% 
+  ungroup() %>% 
+  data.frame() %>%
+  mutate(bigram = reorder(bigram, -tf_idf)) %>%
+  ggplot(aes(bigram, tf_idf, fill = ciklus)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(. ~ ciklus, ncol = 3, scales = "free") +
+  labs(x = NULL, y = "tf-idf") +
+  coord_flip()
+
+
+#### Bigrams
+
+
+library(ggraph)
+library(igraph)
+
+bigram_counts
+
+bigram_graph <- bigram_counts %>%
+  filter(n > 20) %>%
+  graph_from_data_frame()
+
+
+set.seed(2016)
+a <- grid::arrow(type = "closed", length = unit(.15, "inches"))
+
+
+ggraph(bigram_graph, layout = "fr") +
+  geom_edge_link(aes(edge_alpha = n), show.legend = FALSE,
+                 arrow = a, end_cap = circle(.07, 'inches')) +
+  geom_node_point(color = "lightblue", size = 5) +
+  geom_node_text(aes(label = name), vjust = 1, hjust = 1) +
+  theme_void()
